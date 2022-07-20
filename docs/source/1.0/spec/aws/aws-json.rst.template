@@ -192,6 +192,77 @@ In ``awsJson1_1``, servers SHOULD only send the error's
 for both protocols. See `Operation error serialization`_ for full details on how to
 deserialize errors for |quoted shape name|.
 
+.. smithy-trait:: aws.protocols#awsQueryError
+.. _aws.protocols#awsQueryError-trait:
+
+-------------------------------------
+``aws.protocols#awsQueryCompatible`` trait
+-------------------------------------
+
+Summary
+    Enables backward compatibility for :ref:`aws.protocols#awsQueryError <aws.protocols#awsQueryError-trait>`
+Trait selector
+    ``service is([trait|awsJson1_0], [trait|awsJson1_1])``
+
+    *Service shapes with the awsJson1_0 or awsJson1_1 trait*
+Value type
+    Annotation trait
+
+.. tabs::
+
+    .. code-tab:: smithy
+
+        use aws.protocols#awsQueryCompatible
+        use aws.protocols#awsQueryError
+        use aws.protocols#awsJson1_0
+
+        @awsQueryCompatible
+        @awsJson1_0
+        service MyService {
+            version: "2020-02-05"
+        }
+
+        @awsQueryError(
+            code: "InvalidThing",
+            httpResponseCode: 400,
+        )
+        @error("client")
+        structure InvalidThingException {
+            message: String
+        }
+
+    .. code-tab:: json
+
+        {
+            "smithy": "1.0",
+            "shapes": {
+                "smithy.example#MyService": {
+                    "type": "service",
+                    "version": "2020-02-05",
+                    "traits": {
+                        "aws.protocols#awsQueryCompatible": {},
+                        "aws.protocols#awsQuery": {}
+                    }
+                }
+                "smithy.example#InvalidThingException": {
+                    "type": "structure",
+                    "members": {
+                        "message": {
+                            "target": "smithy.api#String"
+                        }
+                    },
+                    "traits": {
+                        "aws.protocols#awsQueryError": {
+                            "code": "InvalidThing",
+                            "httpResponseCode": 400
+                        },
+                        "smithy.api#error": "client"
+                    }
+                }
+            }
+        }
+
+
 
 -------------------------
 Protocol compliance tests
