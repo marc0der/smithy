@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -15,19 +15,34 @@
 
 package software.amazon.smithy.model.knowledge;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.node.Node;
+import software.amazon.smithy.model.shapes.IntegerShape;
 import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.SetShape;
+import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.BoxTrait;
+import software.amazon.smithy.model.traits.ClientOptionalTrait;
+import software.amazon.smithy.model.traits.DefaultTrait;
+import software.amazon.smithy.model.traits.InputTrait;
+import software.amazon.smithy.model.traits.RequiredTrait;
 import software.amazon.smithy.model.traits.SparseTrait;
 
 public class NullableIndexTest {
@@ -37,7 +52,18 @@ public class NullableIndexTest {
     public void checksIfBoxed(Model model, String shapeId, boolean isBoxed) {
         NullableIndex index = NullableIndex.of(model);
         ShapeId targetId = ShapeId.from(shapeId);
-        boolean actual = index.isNullable(targetId);
+        Shape shape = model.expectShape(targetId);
+
+        boolean actual;
+
+        if (shape.isMemberShape()) {
+            // Test member shapes using 2.0 semantics.
+            MemberShape member = shape.asMemberShape().get();
+            actual = index.isMemberNullable(member);
+        } else {
+            // Test root shapes using 1.0 semantics.
+            actual = index.isNullable(targetId);
+        }
 
         if (isBoxed != actual) {
             if (isBoxed) {
@@ -89,7 +115,7 @@ public class NullableIndexTest {
                 .addMember("b", ShapeId.from("smithy.api#Boolean"))
                 // Nullable because the member is boxed
                 .addMember("c", ShapeId.from("smithy.api#PrimitiveBoolean"), b -> b.addTrait(new BoxTrait()))
-                // Not nullable.
+                // Nullable because we don't know if this is a 1.0 or 2.0 model.
                 .addMember("d", ShapeId.from("smithy.api#PrimitiveBoolean"))
                 .addMember("e", ShapeId.from("smithy.api#Document"))
                 .build();
@@ -114,14 +140,6 @@ public class NullableIndexTest {
                 {model, "smithy.api#Double", true},
                 {model, "smithy.api#BigInteger", true},
                 {model, "smithy.api#BigDecimal", true},
-
-                {model, "smithy.api#PrimitiveByte", false},
-                {model, "smithy.api#PrimitiveShort", false},
-                {model, "smithy.api#PrimitiveInteger", false},
-                {model, "smithy.api#PrimitiveLong", false},
-                {model, "smithy.api#PrimitiveFloat", false},
-                {model, "smithy.api#PrimitiveDouble", false},
-                {model, "smithy.api#PrimitiveBoolean", false},
 
                 // Dense lists are nullable but their members are not.
                 {model, denseList.getId().toString(), true},
@@ -150,9 +168,268 @@ public class NullableIndexTest {
                 {model, structure.getMember("a").get().getId().toString(), true},
                 {model, structure.getMember("b").get().getId().toString(), true},
                 {model, structure.getMember("c").get().getId().toString(), true},
-                {model, structure.getMember("d").get().getId().toString(), false},
+                {model, structure.getMember("d").get().getId().toString(), true},
                 // documents are nullable as structure members
                 {model, structure.getMember("e").get().getId().toString(), true},
         });
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullableTraitTests")
+    public void takesNullableIntoAccount(
+            NullableIndex.CheckMode mode,
+            boolean foo,
+            boolean bar,
+            boolean baz,
+            boolean bam,
+            boolean boo
+    ) {
+        StringShape str = StringShape.builder().id("smithy.example#Str").build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                // This member is technically invalid, but clientOptional takes precedent here
+                // over the default trait.
+                .addMember("foo", str.getId(), b -> b.addTrait(new ClientOptionalTrait())
+                        .addTrait(new DefaultTrait(Node.from("a")))
+                        .build())
+                .addMember("bar", str.getId(), b -> b.addTrait(new ClientOptionalTrait())
+                        .addTrait(new RequiredTrait())
+                        .build())
+                .addMember("baz", str.getId(), b -> b.addTrait(new ClientOptionalTrait()).build())
+                .addMember("bam", str.getId(), b -> b.addTrait(new RequiredTrait()).build())
+                .addMember("boo", str.getId(), b -> b.addTrait(new DefaultTrait(Node.from("boo"))).build())
+                .build();
+
+        Model model = Model.builder().addShapes(str, struct).build();
+        NullableIndex nullableIndex = NullableIndex.of(model);
+
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("foo").get(), mode), is(foo));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("bar").get(), mode), is(bar));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("baz").get(), mode), is(baz));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("bam").get(), mode), is(bam));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("boo").get(), mode), is(boo));
+    }
+
+    public static Stream<Arguments> nullableTraitTests() {
+        return Stream.of(
+            Arguments.of(NullableIndex.CheckMode.CLIENT, true, true, true, false, false),
+            Arguments.of(NullableIndex.CheckMode.SERVER, false, false, true, false, false)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("inputTraitTests")
+    public void takesInputTraitIntoAccount(NullableIndex.CheckMode mode, boolean foo, boolean bar, boolean baz) {
+        StringShape str = StringShape.builder().id("smithy.example#Str").build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .addTrait(new InputTrait())
+                .addMember("foo", str.getId(), b -> b.addTrait(new DefaultTrait(Node.from("foo"))).build())
+                .addMember("bar", str.getId(), b -> b.addTrait(new RequiredTrait()).build())
+                .addMember("baz", str.getId())
+                .build();
+
+        Model model = Model.builder().addShapes(str, struct).build();
+        NullableIndex nullableIndex = NullableIndex.of(model);
+
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("foo").get(), mode), is(foo));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("bar").get(), mode), is(bar));
+        assertThat(nullableIndex.isMemberNullable(struct.getMember("baz").get(), mode), is(baz));
+    }
+
+    public static Stream<Arguments> inputTraitTests() {
+        return Stream.of(
+            Arguments.of(NullableIndex.CheckMode.CLIENT, true, true, true),
+            Arguments.of(NullableIndex.CheckMode.SERVER, false, false, true)
+        );
+    }
+
+    @Test
+    public void worksWithV1NullabilityRulesForInteger() {
+        // In Smithy v1, integer was non-nullable by default.
+        IntegerShape integer = IntegerShape.builder()
+                .id("smithy.example#Integer")
+                .build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .addMember("foo", integer.getId())
+                .build();
+        Model model = Model.builder().addShapes(integer, struct).build();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(struct.getMember("foo").get()), is(false));
+    }
+
+    @Test
+    public void worksWithV1NullabilityRulesForString() {
+        StringShape string = StringShape.builder()
+                .id("smithy.example#String")
+                .build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .addMember("foo", string.getId())
+                .build();
+        Model model = Model.builder().addShapes(string, struct).build();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(struct.getMember("foo").get()), is(true));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForBoxedMember() {
+        IntegerShape integer = IntegerShape.builder()
+                .id("smithy.example#Integer")
+                .build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .addMember("foo", integer.getId(), b -> b.addTrait(new BoxTrait()))
+                .build();
+        Model model = Model.builder().addShapes(integer, struct).build();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(struct.getMember("foo").get()), is(true));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForBoxedTarget() {
+        IntegerShape integer = IntegerShape.builder()
+                .id("smithy.example#Integer")
+                .addTrait(new BoxTrait())
+                .build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .addMember("foo", integer.getId())
+                .build();
+        Model model = Model.builder().addShapes(integer, struct).build();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(struct.getMember("foo").get()), is(true));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesIgnoringRequired() {
+        IntegerShape integer = IntegerShape.builder()
+                .id("smithy.example#Integer")
+                .addTrait(new BoxTrait())
+                .build();
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                // The required trait isn't used in v1 to determine nullability.
+                .addMember("foo", integer.getId(), b -> b.addTrait(new RequiredTrait()))
+                .build();
+        Model model = Model.builder().addShapes(integer, struct).build();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(struct.getMember("foo").get()), is(true));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForDenseMaps() {
+        MapShape map = MapShape.builder()
+                .id("smithy.example#Map")
+                .key(ShapeId.from("smithy.api#String"))
+                .value(ShapeId.from("smithy.api#String"))
+                .build();
+        Model model = Model.assembler().addShapes(map).assemble().unwrap();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(map), is(true));
+        assertThat(index.isNullable(map.getKey()), is(false));
+        assertThat(index.isNullable(map.getValue()), is(false));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForSparseMaps() {
+        MapShape map = MapShape.builder()
+                .id("smithy.example#Map")
+                .key(ShapeId.from("smithy.api#String"))
+                .value(ShapeId.from("smithy.api#String"))
+                .addTrait(new SparseTrait())
+                .build();
+        Model model = Model.assembler().addShapes(map).assemble().unwrap();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(map), is(true));
+        assertThat(index.isNullable(map.getKey()), is(false));
+        assertThat(index.isNullable(map.getValue()), is(true));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForDenseLists() {
+        ListShape list = ListShape.builder()
+                .id("smithy.example#Map")
+                .member(ShapeId.from("smithy.api#String"))
+                .build();
+        Model model = Model.assembler().addShapes(list).assemble().unwrap();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(list), is(true));
+        assertThat(index.isNullable(list.getMember()), is(false));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void worksWithV1NullabilityRulesForSparseLists() {
+        ListShape list = ListShape.builder()
+                .id("smithy.example#Map")
+                .member(ShapeId.from("smithy.api#String"))
+                .addTrait(new SparseTrait())
+                .build();
+        Model model = Model.assembler().addShapes(list).assemble().unwrap();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isNullable(list), is(true));
+        assertThat(index.isNullable(list.getMember()), is(true));
+    }
+
+    @Test
+    public void carefulModeTreatsStructureAndUnionAsOptional() {
+        StructureShape struct = StructureShape.builder()
+                .id("smithy.example#Struct")
+                .build();
+        UnionShape union = UnionShape.builder()
+                .id("smithy.example#Union")
+                .addMember("a", ShapeId.from("smithy.api#String"))
+                .build();
+        StructureShape outer = StructureShape.builder()
+                .id("smithy.example#Outer")
+                .addMember("a", struct.getId(), m -> m.addTrait(new RequiredTrait()))
+                .addMember("b", union.getId(), m -> m.addTrait(new RequiredTrait()))
+                .build();
+        Model model = Model.assembler().addShapes(struct, union, outer).assemble().unwrap();
+        NullableIndex index = NullableIndex.of(model);
+
+        assertThat(index.isMemberNullable(outer.getMember("a").get(), NullableIndex.CheckMode.CLIENT_CAREFUL),
+                   is(true));
+        assertThat(index.isMemberNullable(outer.getMember("b").get(), NullableIndex.CheckMode.CLIENT_CAREFUL),
+                   is(true));
+    }
+
+    @Test
+    public void correctlyDeterminesNullabilityOfUpgradedV1Models() {
+        Model model = Model.assembler()
+                .addImport(getClass().getResource("nullable-index-v1.smithy"))
+                .assemble()
+                .unwrap();
+
+        NullableIndex index = NullableIndex.of(model);
+
+        for (MemberShape shape : model.getMemberShapes()) {
+            if (shape.getId().getNamespace().equals("smithy.example")) {
+                if (shape.getMemberName().startsWith("nullable")) {
+                    assertThat(index.isMemberNullable(shape), is(true));
+                    assertThat(index.isNullable(shape), is(true));
+                } else if (shape.getMemberName().startsWith("nonNullable")) {
+                    assertThat(index.isMemberNullable(shape), is(false));
+                    assertThat(index.isNullable(shape), is(false));
+                }
+            }
+        }
     }
 }

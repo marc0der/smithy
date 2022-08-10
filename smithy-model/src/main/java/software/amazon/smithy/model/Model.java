@@ -18,7 +18,6 @@ package software.amazon.smithy.model;
 import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -41,7 +40,9 @@ import software.amazon.smithy.model.shapes.BooleanShape;
 import software.amazon.smithy.model.shapes.ByteShape;
 import software.amazon.smithy.model.shapes.DocumentShape;
 import software.amazon.smithy.model.shapes.DoubleShape;
+import software.amazon.smithy.model.shapes.EnumShape;
 import software.amazon.smithy.model.shapes.FloatShape;
+import software.amazon.smithy.model.shapes.IntEnumShape;
 import software.amazon.smithy.model.shapes.IntegerShape;
 import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.LongShape;
@@ -75,7 +76,7 @@ import software.amazon.smithy.utils.ToSmithyBuilder;
 public final class Model implements ToSmithyBuilder<Model> {
 
     /** Specifies the highest supported version of the IDL. */
-    public static final String MODEL_VERSION = "1.0";
+    public static final String MODEL_VERSION = "2.0";
 
     /** The map of metadata keys to their "node" values. */
     private final Map<String, Node> metadata;
@@ -87,8 +88,7 @@ public final class Model implements ToSmithyBuilder<Model> {
     private final Map<Class<? extends Shape>, Set<? extends Shape>> cachedTypes = new ConcurrentHashMap<>();
 
     /** Cache of computed {@link KnowledgeIndex} instances. */
-    private final Map<Class<? extends KnowledgeIndex>, KnowledgeIndex> blackboard
-            = new ConcurrentSkipListMap<>(Comparator.comparing(Class::getCanonicalName));
+    private final Map<String, KnowledgeIndex> blackboard = new ConcurrentSkipListMap<>();
 
     /** Lazily computed trait mappings. */
     private volatile TraitCache traitCache;
@@ -386,6 +386,25 @@ public final class Model implements ToSmithyBuilder<Model> {
     }
 
     /**
+     * Gets an immutable set of all intEnums in the Model.
+     *
+     * @return Returns the Set of {@code intEnum}s.
+     */
+    public Set<IntEnumShape> getIntEnumShapes() {
+        return toSet(IntEnumShape.class);
+    }
+
+    /**
+     * Gets an immutable set of all intEnums in the Model that have a specific trait.
+     *
+     * @param trait The exact trait class to look for on shapes.
+     * @return Returns the set of {@code intEnum}s that have a specific trait.
+     */
+    public Set<IntEnumShape> getIntEnumShapesWithTrait(Class<? extends Trait> trait) {
+        return new ShapeTypeFilteredSet<>(getShapesWithTrait(trait), IntEnumShape.class);
+    }
+
+    /**
      * Gets an immutable set of all lists in the Model.
      *
      * @return Returns the Set of {@code list}s.
@@ -575,6 +594,25 @@ public final class Model implements ToSmithyBuilder<Model> {
      */
     public Set<StringShape> getStringShapesWithTrait(Class<? extends Trait> trait) {
         return new ShapeTypeFilteredSet<>(getShapesWithTrait(trait), StringShape.class);
+    }
+
+    /**
+     * Gets an immutable set of all enums in the Model.
+     *
+     * @return Returns the Set of {@code enum}s.
+     */
+    public Set<EnumShape> getEnumShapes() {
+        return toSet(EnumShape.class);
+    }
+
+    /**
+     * Gets an immutable set of all enums in the Model that have a specific trait.
+     *
+     * @param trait The exact trait class to look for on shapes.
+     * @return Returns the set of {@code enum}s that have a specific trait.
+     */
+    public Set<EnumShape> getEnumShapesWithTrait(Class<? extends Trait> trait) {
+        return new ShapeTypeFilteredSet<>(getShapesWithTrait(trait), EnumShape.class);
     }
 
     /**
@@ -842,7 +880,7 @@ public final class Model implements ToSmithyBuilder<Model> {
      */
     @SuppressWarnings("unchecked")
     public <T extends KnowledgeIndex> T getKnowledge(Class<T> type, Function<Model, T> constructor) {
-        return (T) blackboard.computeIfAbsent(type, t -> constructor.apply(this));
+        return (T) blackboard.computeIfAbsent(type.getName(), t -> constructor.apply(this));
     }
 
     /**
@@ -959,6 +997,17 @@ public final class Model implements ToSmithyBuilder<Model> {
             }
 
             return this;
+        }
+
+        /**
+         * Gets an immutable view of the current shapes in the builder.
+         *
+         * <p>The returned view may not be updated as shapes are added to the builder.
+         *
+         * @return Returns the current shapes in the builder.
+         */
+        public Map<ShapeId, Shape> getCurrentShapes() {
+            return shapeMap.peek();
         }
 
         @Override

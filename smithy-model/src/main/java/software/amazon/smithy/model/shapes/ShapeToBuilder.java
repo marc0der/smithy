@@ -66,6 +66,11 @@ final class ShapeToBuilder implements ShapeVisitor<AbstractShapeBuilder> {
     }
 
     @Override
+    public AbstractShapeBuilder intEnumShape(IntEnumShape shape) {
+        return shape.toBuilder();
+    }
+
+    @Override
     public AbstractShapeBuilder longShape(LongShape shape) {
         return shape.toBuilder();
     }
@@ -107,6 +112,11 @@ final class ShapeToBuilder implements ShapeVisitor<AbstractShapeBuilder> {
 
     @Override
     public AbstractShapeBuilder stringShape(StringShape shape) {
+        return shape.toBuilder();
+    }
+
+    @Override
+    public AbstractShapeBuilder enumShape(EnumShape shape) {
         return shape.toBuilder();
     }
 

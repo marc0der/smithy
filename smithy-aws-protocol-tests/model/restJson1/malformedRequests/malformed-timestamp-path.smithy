@@ -1,4 +1,4 @@
-$version: "1.0"
+$version: "2.0"
 
 namespace aws.protocoltests.restjson
 
@@ -115,7 +115,7 @@ apply MalformedTimestampPathDefault @httpMalformedRequestTests([
                        "1996-12-19T1639",
                        "1996-12-19T16Z",
                        "1996-12-19T16",
-                       "1996-12-19 16%3A39%3A57Z",
+                       "1996-12-19%2016%3A39%3A57Z",
                        "2011-12-03T10%3A15%3A30%2B01%3A00%5BEurope%2FParis%5D"]
         },
         tags : ["timestamp"]

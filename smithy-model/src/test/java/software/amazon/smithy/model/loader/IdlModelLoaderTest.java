@@ -18,9 +18,12 @@ package software.amazon.smithy.model.loader;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,6 +41,7 @@ import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.traits.DocumentationTrait;
 import software.amazon.smithy.model.traits.DynamicTrait;
 import software.amazon.smithy.model.traits.StringTrait;
+import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.traits.TraitFactory;
 import software.amazon.smithy.model.validation.Severity;
 import software.amazon.smithy.model.validation.ValidatedResult;
@@ -66,6 +70,26 @@ public class IdlModelLoaderTest {
                 assertThat(shape.getSourceLocation().getColumn(), equalTo(1));
             }
         });
+    }
+
+    @Test
+    public void loadsAppropriateTraitSourceLocations() {
+        Model model = Model.assembler()
+                .addImport(getClass().getResource("valid/trait-locations.smithy"))
+                .assemble()
+                .unwrap();
+
+        Shape shape = model.expectShape(ShapeId.from("com.example#TraitBearer"));
+
+        for (Trait trait : shape.getAllTraits().values()) {
+            assertThat(trait.getSourceLocation().getColumn(), equalTo(1));
+        }
+
+        for (MemberShape member : shape.members()) {
+            for (Trait trait : member.getAllTraits().values()) {
+                assertThat(trait.getSourceLocation().getColumn(), equalTo(5));
+            }
+        }
     }
 
     @Test
@@ -148,7 +172,8 @@ public class IdlModelLoaderTest {
     @Test
     public void warnsWhenInvalidSyntacticShapeIdIsFound() {
         ValidatedResult<Model> result = Model.assembler()
-                .addUnparsedModel("foo.smithy", "namespace smithy.example\n"
+                .addUnparsedModel("foo.smithy", "$version: \"2.0\"\n"
+                                                + "namespace smithy.example\n"
                                                 + "@tags([nonono])\n"
                                                 + "string Foo\n")
                 .assemble();
@@ -250,5 +275,15 @@ public class IdlModelLoaderTest {
 
         // Make sure we can find our Unit type
         assertThat(model.expectShape(ShapeId.from("smithy.example#Unit")), Matchers.notNullValue());
+    }
+
+    @Test
+    public void emitsVersionWhenNotSet() {
+        List<LoadOperation> operations = new ArrayList<>();
+        IdlModelParser parser = new IdlModelParser("foo.smithy", "namespace smithy.example\n");
+        parser.parse(operations::add);
+
+        assertThat(operations, hasSize(1));
+        assertThat(operations.get(0), instanceOf(LoadOperation.ModelVersion.class));
     }
 }

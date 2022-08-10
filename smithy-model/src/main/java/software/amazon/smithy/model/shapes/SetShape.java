@@ -26,22 +26,30 @@ import software.amazon.smithy.model.traits.UniqueItemsTrait;
  * Represents a {@code set} shape.
  *
  * <p>Sets are deprecated. Use list shapes with the uniqueItems trait instead.
+ * When serialized using IDL v2, sets are converted to lists with the
+ * uniqueItems trait.
  */
 @Deprecated
 public final class SetShape extends ListShape {
 
     private SetShape(Builder builder) {
-        super(builder);
+        super(prepareBuilder(builder));
+        validateMemberShapeIds();
+    }
+
+    private static Builder prepareBuilder(Builder builder) {
+        // Always add a UniqueItems trait that is serialized when the set is serialized as a list for IDL v2.
+        builder.addTrait(new UniqueItemsTrait(builder.getSourceLocation()));
+        return builder;
     }
 
     public static Builder builder() {
-        // Always add a synthetic UniqueItems trait.
-        return new Builder().addTrait(new UniqueItemsTrait(true));
+        return new Builder();
     }
 
     @Override
     public Builder toBuilder() {
-        return (Builder) builder().from(this).member(getMember());
+        return (Builder) updateBuilder(builder()).member(getMember());
     }
 
     @Override
@@ -99,6 +107,11 @@ public final class SetShape extends ListShape {
         }
 
         @Override
+        public Builder clearMembers() {
+            return (Builder) super.clearMembers();
+        }
+
+        @Override
         public Builder id(String shapeId) {
             return (Builder) super.id(shapeId);
         }
@@ -119,7 +132,7 @@ public final class SetShape extends ListShape {
         }
 
         @Override
-        public Builder addTraits(Collection<Trait> traitsToAdd) {
+        public Builder addTraits(Collection<? extends Trait> traitsToAdd) {
             return (Builder) super.addTraits(traitsToAdd);
         }
 

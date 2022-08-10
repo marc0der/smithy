@@ -28,7 +28,6 @@ import software.amazon.smithy.jsonschema.JsonSchemaMapper;
 import software.amazon.smithy.jsonschema.Schema;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.shapes.Shape;
-import software.amazon.smithy.model.traits.BoxTrait;
 import software.amazon.smithy.model.traits.DeprecatedTrait;
 import software.amazon.smithy.model.traits.ExternalDocumentationTrait;
 import software.amazon.smithy.model.traits.SensitiveTrait;
@@ -58,10 +57,6 @@ public final class OpenApiJsonSchemaMapper implements JsonSchemaMapper {
                 .map(ExternalDocumentation::toNode)
                 .ifPresent(docs -> builder.putExtension("externalDocs", docs));
 
-        if (shape.hasTrait(BoxTrait.class)) {
-            builder.putExtension("nullable", Node.from(true));
-        }
-
         if (shape.hasTrait(DeprecatedTrait.class)) {
             builder.putExtension("deprecated", Node.from(true));
         }
@@ -89,11 +84,9 @@ public final class OpenApiJsonSchemaMapper implements JsonSchemaMapper {
                 updateFloatFormat(builder, config, "float");
             } else if (shape.isDoubleShape()) {
                 updateFloatFormat(builder, config, "double");
-            } else if (shape.isBlobShape()) {
-                if (config instanceof OpenApiConfig) {
-                    String blobFormat = ((OpenApiConfig) config).getDefaultBlobFormat();
-                    return builder.format(blobFormat);
-                }
+            } else if (shape.isBlobShape() && config instanceof OpenApiConfig) {
+                handleFormatKeyword(builder, (OpenApiConfig) config);
+                return builder;
             } else if (shape.isTimestampShape()) {
                 // Add the "double" format when epoch-seconds is used
                 // to account for optional millisecond precision.
@@ -109,6 +102,15 @@ public final class OpenApiJsonSchemaMapper implements JsonSchemaMapper {
         UNSUPPORTED_KEYWORD_DIRECTIVES.forEach(builder::disableProperty);
 
         return builder;
+    }
+
+    private void handleFormatKeyword(Schema.Builder builder, OpenApiConfig config) {
+        String blobFormat = config.getDefaultBlobFormat();
+        if (config.getVersion().supportsContentEncodingKeyword()) {
+            builder.contentEncoding(blobFormat);
+        } else {
+            builder.format(blobFormat);
+        }
     }
 
     private void updateFloatFormat(Schema.Builder builder, JsonSchemaConfig config, String format) {

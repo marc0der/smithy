@@ -1,4 +1,4 @@
-$version: "1.0"
+$version: "2.0"
 
 namespace aws.cloudformation
 
@@ -29,10 +29,20 @@ string cfnName
     conflicts: [
         cfnAdditionalIdentifier,
         cfnMutability,
+        cfnDefaultValue
     ],
     breakingChanges: [{change: "add"}]
 )
 structure cfnExcludeProperty {}
+
+/// Indicates that a structure member has a default value
+/// for the property of the CloudFormation resource.
+@unstable
+@trait(
+    selector: "resource > operation -[input, output]-> structure > member",
+    conflicts: [cfnExcludeProperty]
+)
+structure cfnDefaultValue {}
 
 /// Indicates an explicit CloudFormation mutability of the structure member
 /// when part of a CloudFormation resource.
@@ -41,52 +51,37 @@ structure cfnExcludeProperty {}
     selector: "structure > member",
     conflicts: [cfnExcludeProperty]
 )
-@enum([
-    {
-        value: "full",
-        name: "FULL",
-        documentation: """
-            Indicates that the CloudFormation property generated from this
-            member does not have any mutability restrictions, meaning that it
-            can be specified by the user and returned in a `read` or `list`
-            request.""",
-    },
-    {
-        value: "create-and-read",
-        name: "CREATE_AND_READ",
-        documentation: """
-            Indicates that the CloudFormation property generated from this
-            member can be specified only during resource creation and can be
-            returned in a `read` or `list` request.""",
-    },
-    {
-        value: "create",
-        name: "CREATE",
-        documentation: """
-            Indicates that the CloudFormation property generated from this
-            member can be specified only during resource creation and cannot
-            be returned in a `read` or `list` request. MUST NOT be set if the
-            member is also marked with the `@additionalIdentifier` trait.""",
-    },
-    {
-        value: "read",
-        name: "READ",
-        documentation: """
-            Indicates that the CloudFormation property generated from this
-            member can be returned by a `read` or `list` request, but
-            cannot be set by the user.""",
-    },
-    {
-        value: "write",
-        name: "WRITE",
-        documentation: """
-            Indicates that the CloudFormation property generated from this
-            member can be specified by the user, but cannot be returned by a
-            `read` or `list` request. MUST NOT be set if the member is also
-            marked with the `@additionalIdentifier` trait.""",
-    }
-])
-string cfnMutability
+enum cfnMutability {
+    /// Indicates that the CloudFormation property generated from this
+    /// member does not have any mutability restrictions, meaning that it
+    /// can be specified by the user and returned in a `read` or `list`
+    /// request.
+    FULL = "full"
+
+    /// Indicates that the CloudFormation property generated from this
+    /// member can be specified only during resource creation and can be
+    /// returned in a `read` or `list` request.
+    CREATE_AND_READ = "create-and-read"
+
+    /// Indicates that the CloudFormation property generated from this
+    /// member can be specified only during resource creation and cannot
+    /// be returned in a `read` or `list` request. MUST NOT be set if the
+    /// member is also marked with the `@additionalIdentifier` trait.
+    CREATE = "create"
+
+
+    /// Indicates that the CloudFormation property generated from this
+    /// member can be returned by a `read` or `list` request, but
+    /// cannot be set by the user.
+    READ = "read"
+
+
+    /// Indicates that the CloudFormation property generated from this
+    /// member can be specified by the user, but cannot be returned by a
+    /// `read` or `list` request. MUST NOT be set if the member is also
+    /// marked with the `@additionalIdentifier` trait.
+    WRITE = "write"
+}
 
 /// Indicates that a Smithy resource is a CloudFormation resource.
 @unstable

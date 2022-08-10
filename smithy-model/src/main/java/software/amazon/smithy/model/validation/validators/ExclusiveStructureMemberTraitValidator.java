@@ -23,7 +23,6 @@ import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
-import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.Trait;
 import software.amazon.smithy.model.traits.TraitDefinition;
 import software.amazon.smithy.model.validation.AbstractValidator;
@@ -51,7 +50,7 @@ public final class ExclusiveStructureMemberTraitValidator extends AbstractValida
         }
 
         List<ValidationEvent> events = new ArrayList<>();
-        for (StructureShape shape : model.getStructureShapes()) {
+        for (Shape shape : model.getStructureShapes()) {
             validateExclusiveMembers(shape, exclusiveMemberTraits, events);
             validateExclusiveTargets(model, shape, exclusiveTargetTraits, events);
         }
@@ -60,13 +59,13 @@ public final class ExclusiveStructureMemberTraitValidator extends AbstractValida
     }
 
     private void validateExclusiveMembers(
-            StructureShape shape,
+            Shape shape,
             Set<ShapeId> exclusiveMemberTraits,
             List<ValidationEvent> events
     ) {
         for (ShapeId traitId : exclusiveMemberTraits) {
             List<String> matches = new ArrayList<>();
-            for (MemberShape member : shape.getAllMembers().values()) {
+            for (MemberShape member : shape.members()) {
                 if (member.findTrait(traitId).isPresent()) {
                     matches.add(member.getMemberName());
                 }
@@ -74,7 +73,7 @@ public final class ExclusiveStructureMemberTraitValidator extends AbstractValida
 
             if (matches.size() > 1) {
                 events.add(error(shape, String.format(
-                        "The `%s` trait can be applied to only a single member of a structure, but it was found on "
+                        "The `%s` trait can be applied to only a single member of a shape, but it was found on "
                         + "the following members: %s",
                         Trait.getIdiomaticTraitName(traitId),
                         ValidationUtils.tickedList(matches))));
@@ -84,14 +83,14 @@ public final class ExclusiveStructureMemberTraitValidator extends AbstractValida
 
     private void validateExclusiveTargets(
             Model model,
-            StructureShape shape,
+            Shape shape,
             Set<ShapeId> exclusiveTargets,
             List<ValidationEvent> events
     ) {
         // Find all member targets that violate the exclusion rule (e.g., streaming trait).
         for (ShapeId id : exclusiveTargets) {
             List<String> matches = new ArrayList<>();
-            for (MemberShape member : shape.getAllMembers().values()) {
+            for (MemberShape member : shape.members()) {
                 if (memberTargetHasTrait(model, member, id)) {
                     matches.add(member.getMemberName());
                 }

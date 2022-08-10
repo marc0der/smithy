@@ -17,6 +17,7 @@ package software.amazon.smithy.model.loader;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import software.amazon.smithy.model.FromSourceLocation;
 import software.amazon.smithy.model.SourceLocation;
 import software.amazon.smithy.model.node.ExpectationNotMetException;
@@ -36,32 +37,23 @@ final class LoaderUtils {
      * @param node Node to check.
      * @param shape Shape to associate with the error.
      * @param properties Properties to allow.
+     * @return Returns an optionally created event.
      */
-    static void checkForAdditionalProperties(
+    static Optional<ValidationEvent> checkForAdditionalProperties(
             ObjectNode node,
-            ShapeId shape, Collection<String> properties,
-            List<ValidationEvent> events
+            ShapeId shape, Collection<String> properties
     ) {
         try {
             node.expectNoAdditionalProperties(properties);
+            return Optional.empty();
         } catch (ExpectationNotMetException e) {
             ValidationEvent event = ValidationEvent.fromSourceException(e)
                     .toBuilder()
                     .shapeId(shape)
                     .severity(Severity.WARNING)
                     .build();
-            events.add(event);
+            return Optional.of(event);
         }
-    }
-
-    /**
-     * Checks if the given version string is supported.
-     *
-     * @param versionString Version string to check (e.g., 1, 1.0).
-     * @return Returns true if this is a supported model version.
-     */
-    static boolean isVersionSupported(String versionString) {
-        return versionString.equals("1") || versionString.equals("1.0");
     }
 
     /**
