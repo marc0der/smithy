@@ -223,12 +223,39 @@
             }
         },
         "aws.protocols#awsQueryCompatible": {
-            "type": "structure",
+            "type": "map",
+            "key": {
+                "target": "smithy.api#String"
+            },
+            "value": {
+                "target": "aws.protocols#awsQueryCompatibleError"
+            },
             "traits": {
                 "smithy.api#trait": {
                     "selector": "service :is([trait|aws.protocols#awsJson1_0], [trait|aws.protocols#awsJson1_1])"
                 },
                 "smithy.api#documentation": "Enable backward compatibility when migrating from awsQuery to awsJson protocol"
+            }
+        },
+        "aws.protocols#awsQueryCompatibleError": {
+            "type": "structure",
+            "members": {
+                "code": {
+                    "target": "smithy.api#String",
+                    "traits": {
+                        "smithy.api#documentation": "code"
+                    }
+                },
+                "httpResponseCode": {
+                    "target": "smithy.api#Integer",
+                    "traits": {
+                        "smithy.api#documentation": "httpResponseCode"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "Something something something",
+                "smithy.api#private": {}
             }
         },
         "aws.protocols#httpChecksum": {

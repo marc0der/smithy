@@ -15,29 +15,122 @@
 
 package software.amazon.smithy.aws.traits.protocols;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import software.amazon.smithy.model.SourceException;
 import software.amazon.smithy.model.node.Node;
 import software.amazon.smithy.model.node.ObjectNode;
+import software.amazon.smithy.model.node.StringNode;
 import software.amazon.smithy.model.shapes.ShapeId;
-import software.amazon.smithy.model.traits.AnnotationTrait;
+import software.amazon.smithy.model.traits.AbstractTrait;
+import software.amazon.smithy.model.traits.AbstractTraitBuilder;
+import software.amazon.smithy.model.traits.Trait;
+import software.amazon.smithy.utils.ToSmithyBuilder;
 
-/**
- *
- */
-public final class AwsQueryCompatibleTrait extends AnnotationTrait {
+public final class AwsQueryCompatibleTrait extends AbstractTrait
+        implements ToSmithyBuilder<AwsQueryCompatibleTrait> {
 
     public static final ShapeId ID = ShapeId.from("aws.protocols#awsQueryCompatible");
 
-    public AwsQueryCompatibleTrait(ObjectNode node) {
-        super(ID, node);
+    private List<AwsQueryCompatibleError> errors;
+
+    public AwsQueryCompatibleTrait(Builder builder) {
+        super(ID, builder.getSourceLocation());
+        this.errors = builder.errors;
     }
 
-    public AwsQueryCompatibleTrait() {
-        this(Node.objectNode());
+    @Override
+    protected Node createNode() {
+        return errors.stream().collect(
+            ObjectNode.collect(
+                error -> Node.from(error.getException()),
+                error -> Node.from(toObjectNode(error))
+            )
+        );
     }
 
-    public static final class Provider extends AnnotationTrait.Provider<AwsQueryCompatibleTrait> {
+    public List<AwsQueryCompatibleError> getErrors() {
+        return errors;
+    }
+
+    private static ObjectNode toObjectNode(AwsQueryCompatibleError error) {
+
+        ObjectNode.Builder builder = ObjectNode.builder();
+
+        if (error.getCode() != null || !error.getCode().isEmpty()) {
+            builder.withMember("code", Node.from(error.getCode()));
+        }
+
+        if (error.getHttpResponseCode() != null) {
+            builder.withMember("httpResponseCode", Node.from(error.getHttpResponseCode()));
+        }
+
+        return builder.build();
+    }
+
+    @Override
+    public AwsQueryCompatibleTrait.Builder toBuilder() {
+        AwsQueryCompatibleTrait.Builder builder = new Builder().sourceLocation(getSourceLocation());
+        errors.forEach(builder::addError);
+        return builder;
+    }
+
+    public static AwsQueryCompatibleTrait.Builder builder() {
+        return new AwsQueryCompatibleTrait.Builder();
+    }
+
+
+    /**
+     * Builder used to create the external documentation trait.
+     */
+    public static final class Builder extends AbstractTraitBuilder<AwsQueryCompatibleTrait, Builder> {
+        private final List<AwsQueryCompatibleError> errors = new ArrayList<>();
+
+        public AwsQueryCompatibleTrait.Builder addError(AwsQueryCompatibleError error) {
+            errors.add(Objects.requireNonNull(error));
+            return this;
+        }
+
+        @Override
+        public AwsQueryCompatibleTrait build() {
+            return new AwsQueryCompatibleTrait(this);
+        }
+    }
+
+    public static final class Provider extends AbstractTrait.Provider {
         public Provider() {
-            super(ID, AwsQueryCompatibleTrait::new);
+            super(ID);
+        }
+
+        @Override
+        public Trait createTrait(ShapeId id, Node value) {
+            AwsQueryCompatibleTrait.Builder builder = builder().sourceLocation(value);
+            value.expectObjectNode().getMembers().forEach((k, v) -> {
+
+                String exception = k.expectStringNode().getValue();
+                String code = null;
+                Integer httpResponseCode = null;
+
+                for (Map.Entry<StringNode, Node> entry: v.expectObjectNode().getMembers().entrySet()) {
+                    String member = entry.getKey().getValue();
+                    switch (member) {
+                        case "code":
+                            code = entry.getValue().expectStringNode().getValue();
+                            break;
+                        case "httpResponseCode":
+                            httpResponseCode = entry.getValue().expectNumberNode().getValue().intValue();
+                            break;
+                        default:
+                            throw new SourceException(String.format(
+                                    "Unsupported @awsQueryCompatibleTrait value member '%s'", member), value);
+                    }
+                }
+                builder.addError(new AwsQueryCompatibleError(exception, code, httpResponseCode));
+            });
+
+            return builder.build();
         }
     }
 }
