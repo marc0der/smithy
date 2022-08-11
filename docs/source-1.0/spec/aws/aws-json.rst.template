@@ -195,74 +195,43 @@ deserialize errors for |quoted shape name|.
 .. smithy-trait:: aws.protocols#awsQueryError
 .. _aws.protocols#awsQueryError-trait:
 
--------------------------------------
+------------------------------------------
 ``aws.protocols#awsQueryCompatible`` trait
--------------------------------------
+------------------------------------------
 
 Summary
-    Enables backward compatibility for :ref:`aws.protocols#awsQueryError <aws.protocols#awsQueryError-trait>`
+    When using ``awsQuery`` protocol, the ```awsQueryError`` trait allows a custom code value defined for an error.
+    Client depends on the custom code to determine which type of error was encountered.
+
+    When migrating from ``awsQuery`` to ``awsJson`` protocol, ``awsQueryCompatible`` trait provides
+    the same behaviour by allowing custom codes defined via a map.
+
 Trait selector
     ``service is([trait|awsJson1_0], [trait|awsJson1_1])``
 
     *Service shapes with the awsJson1_0 or awsJson1_1 trait*
+
 Value type
-    Annotation trait
+    ``map`` of ``string`` to ``structure``, the structure contains a member ``code``
 
-.. tabs::
+.. code-block:: smithy
 
-    .. code-tab:: smithy
+    $version: "2"
+    use aws.protocols#awsQueryCompatible
+    use aws.protocols#awsJson1_0
 
-        use aws.protocols#awsQueryCompatible
-        use aws.protocols#awsQueryError
-        use aws.protocols#awsJson1_0
-
-        @awsQueryCompatible
-        @awsJson1_0
-        service MyService {
-            version: "2020-02-05"
+    @awsQueryCompatible(
+        "InvalidThingException": {
+            "code": "InvalidThing"
+        },
+        "SomethingMissingException": {
+            "code": "AWS.SimpleService.SomethingMissingException",
         }
-
-        @awsQueryError(
-            code: "InvalidThing",
-            httpResponseCode: 400,
-        )
-        @error("client")
-        structure InvalidThingException {
-            message: String
-        }
-
-    .. code-tab:: json
-
-        {
-            "smithy": "1.0",
-            "shapes": {
-                "smithy.example#MyService": {
-                    "type": "service",
-                    "version": "2020-02-05",
-                    "traits": {
-                        "aws.protocols#awsQueryCompatible": {},
-                        "aws.protocols#awsQuery": {}
-                    }
-                }
-                "smithy.example#InvalidThingException": {
-                    "type": "structure",
-                    "members": {
-                        "message": {
-                            "target": "smithy.api#String"
-                        }
-                    },
-                    "traits": {
-                        "aws.protocols#awsQueryError": {
-                            "code": "InvalidThing",
-                            "httpResponseCode": 400
-                        },
-                        "smithy.api#error": "client"
-                    }
-                }
-            }
-        }
-
-
+    )
+    @awsJson1_0
+    service MyService {
+        version: "2020-02-05"
+    }
 
 -------------------------
 Protocol compliance tests

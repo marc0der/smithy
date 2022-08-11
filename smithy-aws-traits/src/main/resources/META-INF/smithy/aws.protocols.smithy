@@ -81,6 +81,18 @@ structure awsQueryError {
     httpResponseCode: Integer
 }
 
+/// Enable backward compatibility when migrating from awsQuery to awsJson protocol
+@trait(selector: "service :is([trait|aws.protocols#awsJson1_0], [trait|aws.protocols#awsJson1_1])")
+map awsQueryCompatible {
+    key: String,
+    value: AwsQueryCompatibleError
+}
+
+structure AwsQueryCompatibleError {
+    @required
+    code: String
+}
+
 /// An RPC-based protocol that sends 'POST' requests in the body as Amazon EC2
 /// formatted `x-www-form-urlencoded` strings and responses in XML documents.
 /// This protocol does not use HTTP binding traits.

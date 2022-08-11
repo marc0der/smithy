@@ -10,7 +10,6 @@ use aws.protocols#awsJson1_0
     },
     "QueueDoesNotExist": {
         "code": "AWS.SimpleQueueService.NonExistentQueue",
-        "httpResponseCode": 400
     }
 )
 @awsJson1_0
